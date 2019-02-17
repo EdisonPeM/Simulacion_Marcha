@@ -1,11 +1,20 @@
-globals [final-x final-y pintados]
-patches-own [dis-calles dis-carreras]
+globals [
+  final-x
+  final-y
+  pintados
+]
 
-breed [estudiantes estudiante]
-estudiantes-own[papa pintura aguante]
+patches-own [
+  dis-calles
+  esCalle?
+
+  dis-carreras
+  esCarrera?
+]
 
 breed [lideres lider]
-lideres-own[papa pintura aguante]
+breed [estudiantes estudiante]
+estudiantes-own[papa pintura aguante]
 
 breed [policias policia]
 
@@ -14,56 +23,63 @@ to setup
   set final-x max-pxcor
   set final-y max-pycor
   set pintados 0
+  ;;Pintar las cuadras
   ask patches [
-    set pcolor  gray                                                   ;;Pintar las cuadras
-    set dis-calles (world-width / num-calles)
-    set dis-carreras (world-height / num-carreras)
-  ]
-  ask patches with [pxcor mod dis-calles < ancho-calzada ][
-    set pcolor black                                                   ;;Pintar Calles
-  ]
-  ask patches with [pycor mod dis-carreras < ancho-calzada ][
-    set pcolor black                                                   ;;Pintar Carreras
+    set pcolor gray
+    set dis-calles int (world-width / (num-calles - 1))
+    set dis-carreras int (world-height / (num-carreras - 1))
+    set esCalle? false
+    set esCarrera? false
   ]
 
-  ask patches with [ pxcor = world-width - 1 ][
-    set pcolor black                                                   ;;Pintar Bordes en x
-  ]
-  ask patches with [ pycor = world-height - 1 ][
-    set pcolor black                                                   ;;Pintar Bordes en y
+  ask patches [
+    ;;Pintar Calles
+    if ((pxcor mod dis-calles < ancho-calzada) or (pxcor >= world-width - ancho-calzada))
+    [
+      set pcolor black
+      set esCalle? true
+    ]
+
+    ;;Pintar Carreras
+    if ((pycor mod dis-carreras < ancho-calzada ) or (pycor >= world-height - ancho-calzada))
+    [
+      set pcolor black
+      set esCarrera? true
+    ]
+
+    ;;Pintar Final
+    if(pxcor = world-width - 1 and pycor = world-height - 1)[
+      set pcolor white
+    ]
   ]
 
-  ask patches with [pxcor = world-width - 1 and pycor = world-height - 1][
-    set pcolor white                                                     ;;Pintar Final
+  ;;Creación de Lider Estudiantil
+  create-lideres 1 [
+    set shape  "person"
+    set color yellow
+    set size 1
+    set label-color blue - 2
+    setxy 0 6
+    set heading 0
   ]
 
-  create-lideres 1 [                                                   ;;Creación de Lider Estudiantil
+  ;;Creación de estudiantes
+  create-estudiantes (num-estudiantes - 1) [
     set shape  "person"
     set color yellow
     set size 1
     set label-color blue - 2
     setxy (who * 1 mod ancho-calzada) (6 - int (who / ancho-calzada) mod 6)
     set heading 0
-    if (random 100 < porcentaje-pintura)[
-      set pintura true                                                 ;;Probabilidad de llevar pintura
-    ]
-    if (random 100 < procentaje-papas)[
-      set papa true                                                    ;;Probabilidad de llevar Papas bomba
-    ]
-  ]
 
-  create-estudiantes (num-estudiantes - 1) [                                ;;Creación de estudiantes
-    set shape  "person"
-    set color yellow
-    set size 1
-    set label-color blue - 2
-    setxy (who * 1 mod ancho-calzada) (6 - int (who / ancho-calzada) mod 6)
-    set heading 0
+    ;;Probabilidad de llevar pintura
     if (random 100 < porcentaje-pintura)[
-      set pintura true                                                 ;;Probabilidad de llevar pintura
+      set pintura true
     ]
+
+    ;;Probabilidad de llevar Papas bomba
     if (random 100 < procentaje-papas)[
-      set papa true                                                    ;;Probabilidad de llevar Papas bomba
+      set papa true
     ]
   ]
 
@@ -80,13 +96,11 @@ to setup
 end
 
 to do
-  if (all? lideres [xcor = final-x and ycor = final-y] and all? estudiantes [xcor = final-x and ycor = final-y])
+  if (all? lideres [xcor >= final-x and ycor >= final-y] and all? estudiantes [xcor >= final-x and ycor >= final-y])
     [ stop ]
 
   ask lideres [
-    moverLider
-    pintar
-    explotar
+    moverLiderHaciaFinal
   ]
 
   ask estudiantes [
@@ -102,36 +116,15 @@ to do
   tick
 end
 
-to moverLider
-  if (patch-at 0 1 != Nobody ) [
-    if ((final-y > ycor) and ([pcolor] of patch-at 0 1 = black) or ([pcolor] of patch-at 0 1 = white))[
-      set heading 0
-      fd 1
-    ]
-  ]
-
-  if (patch-at 1 0 != Nobody ) [
-    if((final-x > xcor) and ([pcolor] of patch-at 1 0 = black) or ([pcolor] of patch-at 1 0 = white))[
-      set heading 90
-      fd 1
-    ]
-  ]
+to moverLiderHaciaFinal
+  facexy final-x final-y
+  if esCalle? [moverArriba]
+  if esCarrera? [moverDerecha]
 end
 
 to moverEstudiantes
-  if (patch-at 0 1 != Nobody ) [
-    if ((final-y > ycor) and ((([pcolor] of patch-at 0 1 = black) and (not any? estudiantes-on patch-at 0 1) and (not any? lideres-on patch-at 0 1)) or ([pcolor] of patch-at 0 1 = white)))[
-      set heading 0
-      fd 1
-    ]
-  ]
-
-  if (patch-at 1 0 != Nobody ) [
-    if ((final-x > xcor) and ((([pcolor] of patch-at 1 0 = black) and (not any? estudiantes-on patch-at 1 0) and (not any? lideres-on patch-at 1 0)) or ([pcolor] of patch-at 1 0 = white)))[
-      set heading 90
-      fd 1
-    ]
-  ]
+  moverArriba
+  moverDerecha
 end
 
 to pintar
@@ -210,6 +203,62 @@ to huir
     ]
   ]
 end
+
+to moverArriba
+  if(patch-at 1 0 != nobody) [
+    if (
+      ([pcolor] of patch-at 1 0 = white) or ([pcolor] of patch-at 1 0 = black)
+      and
+      (not any? estudiantes-on patch-at 1 0) and (not any? lideres-on patch-at 1 0)
+    )
+    [
+      set heading 0
+      fd 1
+    ]
+  ]
+end
+
+to moverDerecha
+  if(patch-at 0 1 != nobody) [
+    if (
+      ([pcolor] of patch-at 0 1 = white) or ([pcolor] of patch-at 0 1 = black)
+      and
+      (not any? estudiantes-on patch-at 0 1) and (not any? lideres-on patch-at 0 1)
+    )
+    [
+      set heading 90
+      fd 1
+    ]
+  ]
+end
+
+to moverAbajo
+  if(patch-at -0.1 0 != nobody) [
+    if (
+      ([pcolor] of patch-at -0.1 0 = white) or ([pcolor] of patch-at -0.1 0 = black)
+      and
+      (not any? estudiantes-on patch-at -0.1 0) and (not any? lideres-on patch-at -0.1 0)
+    )
+    [
+      set heading 180
+      fd 0.1
+    ]
+  ]
+end
+
+to moverIzquierda
+  if(patch-at 0 -0.1 != nobody) [
+    if (
+      ([pcolor] of patch-at 0 -0.1 = white) or ([pcolor] of patch-at 0 -0.1 = black)
+      and
+      (not any? estudiantes-on patch-at 0 -0.1) and (not any? lideres-on patch-at 0 -0.1)
+    )
+    [
+      set heading 270
+      fd 0.1
+    ]
+  ]
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 304
@@ -232,8 +281,8 @@ GRAPHICS-WINDOW
 50
 0
 30
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -247,7 +296,7 @@ num-calles
 num-calles
 1
 10
-7.0
+5.0
 1
 1
 NIL
@@ -324,7 +373,7 @@ num-esmad
 num-esmad
 0
 100
-1.0
+0.0
 1
 1
 NIL
