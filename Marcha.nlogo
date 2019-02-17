@@ -1,62 +1,62 @@
 globals [
   final-x
   final-y
+  dis-carreras
+  dis-calles
   pintados
 ]
-
 patches-own [
-  dis-calles
   esCalle?
-
-  dis-carreras
   esCarrera?
-]
+  esCasa?
+  esFinal?
 
+  nivelGas
+  nivelFuego
+]
 breed [lideres lider]
+breed [policias policia]
 breed [estudiantes estudiante]
 estudiantes-own[papa pintura aguante]
-
-breed [policias policia]
 
 to setup
   ca
   set final-x max-pxcor
   set final-y max-pycor
   set pintados 0
+  set dis-calles int (world-width / (num-calles - 1))
+  set dis-carreras int (world-height / (num-carreras - 1))
   ;;Pintar las cuadras
   ask patches [
-    set pcolor gray
-    set dis-calles int (world-width / (num-calles - 1))
-    set dis-carreras int (world-height / (num-carreras - 1))
+    set esCasa? true
+    set esFinal? false
     set esCalle? false
     set esCarrera? false
-  ]
+    set nivelGas 0
+    set nivelFuego 0
 
-  ask patches [
-    ;;Pintar Calles
-    if ((pxcor mod dis-calles < ancho-calzada) or (pxcor >= world-width - ancho-calzada))
-    [
-      set pcolor black
+    if ((pxcor mod dis-calles < ancho-calzada) or (pxcor >= world-width - ancho-calzada))[
       set esCalle? true
+      set esCasa? false
     ]
 
-    ;;Pintar Carreras
-    if ((pycor mod dis-carreras < ancho-calzada ) or (pycor >= world-height - ancho-calzada))
-    [
-      set pcolor black
+    if ((pycor mod dis-carreras < ancho-calzada ) or (pycor >= world-height - ancho-calzada))[
       set esCarrera? true
+      set esCasa? false
     ]
 
-    ;;Pintar Final
-    if(pxcor = world-width - 1 and pycor = world-height - 1)[
-      set pcolor white
+    if(pxcor = final-x and pycor = final-y)[
+      set esFinal? true
+      set esCasa? false
     ]
   ]
+
+  pintarCalles
 
   ;;Creación de Lider Estudiantil
   create-lideres 1 [
     set shape  "person"
-    set color yellow
+    set color orange
     set size 1
     set label-color blue - 2
     setxy 0 6
@@ -83,16 +83,26 @@ to setup
     ]
   ]
 
-  create-policias (num-esmad / 100 * num-estudiantes) [                ;;Creación de policias del esmad
+  ;;Creación de policias del esmad
+  create-policias (num-esmad / 100 * num-estudiantes) [
     set shape  "person police"
     set color green
     set size 1
     set label-color blue - 2
-    setxy (who * 1 mod ancho-calzada) (20 + int (who / ancho-calzada ) mod 10)
+    setxy (who * 1 mod ancho-calzada) (20 + int (who / ancho-calzada ) mod 20)
     set heading 90
   ]
 
   reset-ticks
+end
+
+to pintarCalles
+  ask patches [
+    if esCasa? [set pcolor gray]
+    if esCalle? [set pcolor black]
+    if esCarrera? [set pcolor black]
+    if esFinal? [set pcolor white]
+  ]
 end
 
 to do
@@ -100,31 +110,85 @@ to do
     [ stop ]
 
   ask lideres [
-    moverLiderHaciaFinal
+    moverHaciaFinal
   ]
 
   ask estudiantes [
-    moverEstudiantes
+    seguirLider
     pintar
     explotar
   ]
 
-  ask policias [
+  diffuse nivelGas 0.4
+  diffuse nivelFuego 0.4
+  ask patches
+  [
+    if (0.1 < nivelFuego and nivelFuego  < 20)
+    [
+      set pcolor scale-color red nivelFuego 0.01 0.5
+      set nivelFuego nivelFuego * 0.7
+    ]
 
+    if (0.1 < nivelGas and nivelGas < 20)
+    [
+      set pcolor scale-color yellow nivelGas 0 0.5
+      set nivelGas nivelGas * 0.7
+    ]
   ]
 
   tick
 end
 
-to moverLiderHaciaFinal
+to moverHaciaFinal
+  if (xcor = final-x and ycor = final-y) [stop]
   facexy final-x final-y
-  if esCalle? [moverArriba]
-  if esCarrera? [moverDerecha]
+
+  ;;if ([nivelGas] of patches in-radius 3)
+  ;;[facexy (- final-x) (- final-y)]
+
+  let orientacion int (heading / 90)
+
+  ifelse (esCalle? and esCarrera?) [
+    ifelse (random 100 < 50)
+    [
+      ifelse(orientacion = 1 or orientacion = 2)
+      [moverAbajo]
+      [moverArriba]
+    ]
+    [
+      ifelse(orientacion = 0 or orientacion = 1)
+      [moverDerecha]
+      [moverIzquierda]
+    ]
+  ][
+    if esCalle? [
+      ifelse(orientacion = 0 or orientacion = 4)
+      [moverArriba]
+      [moverAbajo]
+    ]
+    if esCarrera? [
+      ifelse(orientacion = 0 or orientacion = 1)
+      [moverDerecha]
+      [moverIzquierda]
+    ]
+  ]
 end
 
-to moverEstudiantes
-  moverArriba
-  moverDerecha
+to seguirLider
+  if (xcor = final-x and ycor = final-y) [stop]
+  face turtle 0
+  let orientacion int (heading / 90)
+
+  if esCalle? [
+    ifelse(orientacion = 0 or orientacion = 3)
+    [moverArriba]
+    [moverAbajo]
+  ]
+  if esCarrera? [
+    ifelse(orientacion = 0 or orientacion = 1)
+    [moverDerecha]
+    [moverIzquierda]
+  ]
 end
 
 to pintar
@@ -154,23 +218,23 @@ end
 
 to explotar
   if ( papa != 0  and random 100 > 95)[
-      if( ycor < max-pycor - 1  and [pcolor] of patch-at 0 1 = gray )[
-        ask patch-at 0 01 [set pcolor red]
-         stop
-      ]
-      if( ycor > 1  and [pcolor] of patch-at 0 -1 = gray )[
-        ask patch-at 0 -1 [set pcolor red]
-        stop
-      ]
-      if( xcor < max-pxcor  and [pcolor] of patch-at 1 0 = gray)[
-        ask patch-at 1 0 [set pcolor red]
-        stop
-      ]
-      if( xcor > 1  and [pcolor] of patch-at -1 0 = gray)[
-        ask patch-at -1 0 [set pcolor red]
-        stop
-      ]
+    if( ycor < max-pycor - 1  and [esCasa?] of patch-at 0 1)[
+      ask patch-at 0 01 [set nivelFuego 20]
+      stop
     ]
+    if( ycor > 1  and [esCasa?] of patch-at 0 -1)[
+      ask patch-at 0 -1 [set nivelFuego 20]
+      stop
+    ]
+    if( xcor < max-pxcor and [esCasa?] of patch-at 1 0)[
+      ask patch-at 1 0 [set nivelFuego 20]
+      stop
+    ]
+    if( xcor > 1 and [esCasa?] of patch-at -1 0)[
+      ask patch-at -1 0 [set nivelFuego 20]
+      stop
+    ]
+  ]
 end
 
 to alertar
@@ -179,85 +243,46 @@ to alertar
       disparar
     ]
   ]
-  ask estudiantes [
-    huir
-  ]
 end
 
 to disparar
-  ask patches with [ pxcor = [xcor] of turtle 0  and pycor = [ycor] of turtle 0][ set pcolor yellow]
-end
-
-to huir
-  if (patch-at 0 -1 != Nobody ) [
-    if(([pcolor] of patch-at 0 -1 = black) and ([pcolor] of patch-at 0 -1 = white))[
-      set heading 0
-      bk 1
-    ]
-  ]
-
-  if (patch-at 1 0 != Nobody ) [
-    if (([pcolor] of patch-at 1 0 = black) and ([pcolor] of patch-at 1 0 = white))[
-      set heading 90
-      fd 1
-    ]
+  ask patch ([xcor] of turtle 0) ([ycor] of turtle 0 )
+  [
+    set nivelGas 20
   ]
 end
+
 
 to moverArriba
-  if(patch-at 1 0 != nobody) [
-    if (
-      ([pcolor] of patch-at 1 0 = white) or ([pcolor] of patch-at 1 0 = black)
-      and
-      (not any? estudiantes-on patch-at 1 0) and (not any? lideres-on patch-at 1 0)
-    )
-    [
-      set heading 0
-      fd 1
-    ]
-  ]
+  set heading 0
+  if puedeAvanzar? [fd 1]
 end
 
 to moverDerecha
-  if(patch-at 0 1 != nobody) [
-    if (
-      ([pcolor] of patch-at 0 1 = white) or ([pcolor] of patch-at 0 1 = black)
-      and
-      (not any? estudiantes-on patch-at 0 1) and (not any? lideres-on patch-at 0 1)
-    )
-    [
-      set heading 90
-      fd 1
-    ]
-  ]
+  set heading 90
+  if puedeAvanzar? [fd 1]
 end
 
 to moverAbajo
-  if(patch-at -0.1 0 != nobody) [
-    if (
-      ([pcolor] of patch-at -0.1 0 = white) or ([pcolor] of patch-at -0.1 0 = black)
-      and
-      (not any? estudiantes-on patch-at -0.1 0) and (not any? lideres-on patch-at -0.1 0)
-    )
-    [
-      set heading 180
-      fd 0.1
-    ]
-  ]
+  set heading 180
+  if puedeAvanzar? [fd 1]
 end
 
 to moverIzquierda
-  if(patch-at 0 -0.1 != nobody) [
-    if (
-      ([pcolor] of patch-at 0 -0.1 = white) or ([pcolor] of patch-at 0 -0.1 = black)
+  set heading 270
+  if puedeAvanzar? [fd 1]
+end
+
+to-report puedeAvanzar?
+  report (can-move? 1 and (
+    ([esFinal?] of patch-ahead 1)
+    or
+    (
+      (not [esCasa?] of patch-ahead 1)
       and
-      (not any? estudiantes-on patch-at 0 -0.1) and (not any? lideres-on patch-at 0 -0.1)
+      (not any? estudiantes-on patch-ahead 1) and (not any? lideres-on patch-ahead 1)
     )
-    [
-      set heading 270
-      fd 0.1
-    ]
-  ]
+  ))
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -311,7 +336,7 @@ num-carreras
 num-carreras
 1
 10
-3.0
+5.0
 1
 1
 NIL
@@ -326,7 +351,7 @@ ancho-calzada
 ancho-calzada
 1
 10
-2.0
+3.0
 1
 1
 NIL
@@ -373,7 +398,7 @@ num-esmad
 num-esmad
 0
 100
-0.0
+19.0
 1
 1
 NIL
@@ -405,7 +430,7 @@ porcentaje-pintura
 porcentaje-pintura
 0
 100
-0.0
+100.0
 1
 1
 NIL
@@ -420,7 +445,7 @@ procentaje-papas
 procentaje-papas
 0
 100
-0.0
+100.0
 1
 1
 NIL
