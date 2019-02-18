@@ -228,7 +228,7 @@ evaporation-rate
 evaporation-rate
 0.0
 99.0
-14.0
+88.0
 1.0
 1
 NIL
@@ -260,7 +260,7 @@ population
 population
 0.0
 200.0
-125.0
+50.0
 1.0
 1
 NIL
