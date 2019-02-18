@@ -3,7 +3,6 @@ globals [
   final-y
   dis-carreras
   dis-calles
-  pintados
 ]
 patches-own [
   esCalle?
@@ -11,6 +10,7 @@ patches-own [
   esCasa?
   esFinal?
   pintado?
+  quemado?
   nivelGas
   nivelFuego
 ]
@@ -23,7 +23,6 @@ to setup
   ca
   set final-x max-pxcor
   set final-y max-pycor
-  set pintados 0
   set dis-calles int (world-width / (num-calles - 1))
   set dis-carreras int (world-height / (num-carreras - 1))
   ;;Pintar las cuadras
@@ -33,6 +32,7 @@ to setup
     set esCalle? false
     set esCarrera? false
     set pintado? false
+    set quemado? false
     set nivelGas 0
     set nivelFuego 0
 
@@ -46,7 +46,7 @@ to setup
       set esCasa? false
     ]
 
-    if(pxcor = final-x and pycor = final-y)[
+    if(pxcor >= final-x and pycor >= final-y)[
       set esFinal? true
       set esCasa? false
     ]
@@ -74,13 +74,17 @@ to setup
     set heading 0
 
     ;;Probabilidad de llevar pintura
-    if (random 100 < porcentaje-pintura)[
+    ifelse (random 100 < porcentaje-pintura)[
       set pintura? true
+    ][
+      set pintura? false
     ]
 
     ;;Probabilidad de llevar Papas bomba
-    if (random 100 < procentaje-papas)[
+    ifelse (random 100 < procentaje-papas)[
       set papa? true
+    ][
+      set papa? false
     ]
   ]
 
@@ -102,44 +106,50 @@ to pintarCalles
     if esCalle? [set pcolor black]
     if esCarrera? [set pcolor black]
 
-    ifelse (nivelGas > nivelFuego)
-    [set pcolor scale-color yellow nivelGas 0.01 1]
-    [set pcolor scale-color red nivelFuego 0.01 1]
+    ifelse (nivelGas >= nivelFuego)
+    [if(nivelGas > 0.05) [set pcolor scale-color yellow nivelGas 0.01 1]]
+    [if(nivelFuego > 0.05) [set pcolor scale-color red nivelFuego 0.01 1]]
 
     if esFinal? [set pcolor white]
     if esCasa? [set pcolor gray]
+    if esCasa? and quemado?  [set pcolor red]
     if pintado?  [set pcolor blue]
+    ;;if pintado?  [set pcolor one-of [blue green cyan orange]]
   ]
 end
 
 to do
-  if (all? lideres [xcor >= final-x and ycor >= final-y] and all? estudiantes [xcor >= final-x and ycor >= final-y])
-    [ stop ]
+  ;if (all? lideres [xcor > final-x and ycor > final-y] and all? estudiantes [xcor > final-x and ycor > final-y])
+   ; [ stop ]
 
   ask lideres [
-    moverLider
+    ifelse (xcor >= final-x and ycor >= final-y) [ stop ]
+    [moverLider]
   ]
 
   ask estudiantes [
-    seguirLider
-    pintar
-    explotar
+    ifelse (xcor >= final-x and ycor >= final-y) [ stop ]
+    [
+      seguirLider
+      pintar
+      explotar
+    ]
   ]
 
   diffuse nivelGas 0.4
   diffuse nivelFuego 0.4
   ask patches
   [
-    set nivelGas nivelGas * 0.9
-    set nivelFuego nivelFuego * 0.9
+    if (nivelFuego > 0.05) [set quemado? true ]
+    set nivelGas nivelGas * 0.8
+    set nivelFuego nivelFuego * 0.7
   ]
-  pintarCalles
 
+  pintarCalles
   tick
 end
 
 to moverLider
-  if (xcor = final-x and ycor = final-y) [ stop ]
   facexy final-x final-y
 
   ;;if ([nivelGas] of patches in-radius 3)
@@ -174,8 +184,11 @@ to moverLider
 end
 
 to seguirLider
-  if (xcor = final-x and ycor = final-y) [ die ]
-  face turtle 0
+  ifelse (([nivelGas] of patch-here) > 0.04)
+  [ huirGas false ]
+  ;[]
+  [face turtle 0]
+
   let orientacion int (heading / 90)
 
   if esCalle? [
@@ -183,6 +196,7 @@ to seguirLider
     [moverArriba false]
     [moverAbajo false]
   ]
+
   if esCarrera? [
     ifelse(orientacion = 0 or orientacion = 1)
     [moverDerecha false]
@@ -192,19 +206,19 @@ end
 
 to pintar
   if ( pintura? and random 100 > 95)[
-    if( ycor < max-pycor - 1  and [esCasa?] of patch-at 0 1 )[
+    if( ycor < max-pycor - 1 and [esCasa?] of patch-at 0 1 )[
       ask patch-at 0 1 [ask patches in-radius 1 [if esCasa? [set pintado? true]]]
     ]
 
-    if( ycor > 1  and [esCasa?] of patch-at 0 -1 )[
+    if( ycor > 1 and [esCasa?] of patch-at 0 -1 )[
       ask patch-at 0 -1 [ask patches in-radius 1 [if esCasa? [set pintado? true]]]
     ]
 
-    if( xcor < max-pxcor  and [esCasa?] of patch-at 1 0)[
+    if( xcor < max-pxcor and [esCasa?] of patch-at 1 0)[
       ask patch-at 1 0 [ask patches in-radius 1 [if esCasa? [set pintado? true]]]
     ]
 
-    if( xcor > 1  and [esCasa?] of patch-at -1 0)[
+    if( xcor > 1 and [esCasa?] of patch-at -1 0)[
       ask patch-at -1 0 [ask patches in-radius 1 [if esCasa? [set pintado? true]]]
     ]
 
@@ -215,22 +229,8 @@ end
 
 to explotar
   if ( papa? and random 100 > 95)[
-    if( ycor < max-pycor - 1 and [esCasa?] of patch-at 0 1)[
-      ask patch-at 0 01 [set nivelFuego 60]
-    ]
-
-    if( ycor > 1 and [esCasa?] of patch-at 0 -1)[
-      ask patch-at 0 -1 [set nivelFuego 60]
-    ]
-
-    if( xcor < max-pxcor - 1 and [esCasa?] of patch-at 1 0)[
-      ask patch-at 1 0 [set nivelFuego 60]
-    ]
-
-    if( xcor > 1 and [esCasa?] of patch-at -1 0)[
-      ask patch-at -1 0 [set nivelFuego 60]
-    ]
-
+    ask patch-here [set nivelFuego 60]
+    alertar
     stop
   ]
 end
@@ -244,44 +244,83 @@ to alertar
 end
 
 to disparar
-  ask patch ([xcor] of turtle 0) ([ycor] of turtle 0 )
+  let estudianteBlanco (random num-estudiantes)
+  ask patch ([xcor] of turtle estudianteBlanco) ([ycor] of turtle estudianteBlanco)
   [
-    set nivelGas 60
+    if (pxcor < (final-x - ancho-calzada) or pycor < (final-y - ancho-calzada))
+    [set nivelGas 60]
   ]
 end
 
 
 to moverArriba [esLider]
   set heading 0
-  if puedeAvanzar? esLider [fd 1]
+  if (puedeAvanzar? esLider) [fd 1]
 end
 
 to moverDerecha [esLider]
   set heading 90
-  if puedeAvanzar? esLider [fd 1]
+  if (puedeAvanzar? esLider) [fd 1]
 end
 
 to moverAbajo [esLider]
   set heading 180
-  if puedeAvanzar? esLider [fd 1]
+  if (puedeAvanzar? esLider) [fd 1]
 end
 
 to moverIzquierda [esLider]
   set heading 270
-  if puedeAvanzar? esLider [fd 1]
+  if (puedeAvanzar? esLider) [fd 1]
 end
 
 to-report puedeAvanzar? [esLider?]
   report (can-move? 1 and
     (
       ([esFinal?] of patch-ahead 1) or (
-        (not [esCasa?] of patch-ahead 1) and (esLider? or (
-          (not any? estudiantes-on patch-ahead 1) and
-          (not any? lideres-on patch-ahead 1)
-        ))
+        (not [esCasa?] of patch-ahead 1) and (
+          esLider? or (
+            (not any? estudiantes-on patch-ahead 1) and
+            (not any? lideres-on patch-ahead 1)
+          )
+        )
       )
     )
   )
+end
+
+to huirGas [esLider?]
+  let gasAdelante 0
+  let gasDerecha 0
+  let gasIzquierda 0
+  let gasAtras 0
+
+  if (can-move? 1) [set gasAdelante [nivelGas] of patch-ahead 1]
+  if (patch-right-and-ahead 90 1 != nobody) [set gasDerecha [nivelGas] of patch-right-and-ahead 90 1]
+  if (patch-left-and-ahead 90 1 != nobody) [set gasIzquierda [nivelGas] of patch-left-and-ahead 90 1]
+  if (can-move? -1) [set gasAtras [nivelGas] of patch-ahead -1]
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasAdelante)
+  [
+    if (puedeAvanzar? esLider?) [fd 1]
+  ]
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasAtras)
+  [
+    rt 180
+    if (puedeAvanzar? esLider?) [fd 1]
+  ]
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasDerecha)
+  [
+    rt 270
+    if (puedeAvanzar? esLider?) [fd 1]
+  ]
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasIzquierda)
+  [
+    rt 90
+    if (puedeAvanzar? esLider?) [fd 1]
+  ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -397,7 +436,7 @@ num-esmad
 num-esmad
 0
 100
-25.0
+11.0
 1
 1
 NIL
@@ -429,7 +468,7 @@ porcentaje-pintura
 porcentaje-pintura
 0
 100
-100.0
+48.0
 1
 1
 NIL
@@ -444,7 +483,7 @@ procentaje-papas
 procentaje-papas
 0
 100
-100.0
+28.0
 1
 1
 NIL
@@ -459,7 +498,7 @@ tolerancia-esmad
 tolerancia-esmad
 0
 100
-82.0
+73.0
 1
 1
 NIL
