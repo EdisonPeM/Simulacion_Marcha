@@ -213,7 +213,7 @@ diffusion-rate
 diffusion-rate
 0.0
 99.0
-99.0
+61.0
 1.0
 1
 NIL
@@ -228,7 +228,7 @@ evaporation-rate
 evaporation-rate
 0.0
 99.0
-88.0
+7.0
 1.0
 1
 NIL
