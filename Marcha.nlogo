@@ -1,214 +1,384 @@
-globals [final-x final-y pintados]
-patches-own [dis-calles dis-carreras]
+; Hecho por:
+;   Rodrigo Andrés Niño Romero
+;   Edison Enrique Peñuela Mesa
+;
 
-breed [estudiantes estudiante]
-estudiantes-own[papa pintura aguante]
+globals [
+  final-x
+  final-y
 
-breed [lideres lider]
-lideres-own[papa pintura aguante]
+  dis-carreras
+  dis-calles
 
-breed [policias policia]
+  arriba
+  abajo
+  izquierda
+  derecha
+]
+patches-own [
+  esCalle?
+  esCarrera?
+  esCasa?
+  esFinal?
+
+  pintado?
+  quemado?
+
+  nivelGas
+  nivelFuego
+  rutaMarcha
+]
+
+breed [ policias policia ]
+policias-own[
+  alertado?
+  objetivo
+]
+breed [ estudiantes estudiante ]
+estudiantes-own[
+  papa?
+  pintura?
+  aguante
+  cont
+]
 
 to setup
   ca
   set final-x max-pxcor
   set final-y max-pycor
-  set pintados 0
+
+  set dis-calles int (world-width / (num-calles - 1))
+  set dis-carreras int (world-height / (num-carreras - 1))
+
+  set arriba 0
+  set abajo 180
+  set izquierda 270
+  set derecha 90
+
+  ;;Pintar las cuadras
   ask patches [
-    set pcolor  gray                                                   ;;Pintar las cuadras
-    set dis-calles (world-width / num-calles)
-    set dis-carreras (world-height / num-carreras)
-  ]
-  ask patches with [pxcor mod dis-calles < ancho-calzada ][
-    set pcolor black                                                   ;;Pintar Calles
-  ]
-  ask patches with [pycor mod dis-carreras < ancho-calzada ][
-    set pcolor black                                                   ;;Pintar Carreras
+    set esCasa? true
+    set esFinal? false
+    set esCalle? false
+    set esCarrera? false
+    set pintado? false
+    set quemado? false
+    set nivelGas 0
+    set nivelFuego 0
+    set rutaMarcha 0
+
+    if ((pxcor mod dis-calles < ancho-calzada) or (pxcor >= world-width - ancho-calzada))[
+      set esCalle? true
+      set esCasa? false
+    ]
+
+    if ((pycor mod dis-carreras < ancho-calzada ) or (pycor >= world-height - ancho-calzada))[
+      set esCarrera? true
+      set esCasa? false
+    ]
+
+    if(pxcor >= final-x and pycor >= final-y)[
+      set esFinal? true
+      set esCasa? false
+    ]
   ]
 
-  ask patches with [ pxcor = world-width - 1 ][
-    set pcolor black                                                   ;;Pintar Bordes en x
-  ]
-  ask patches with [ pycor = world-height - 1 ][
-    set pcolor black                                                   ;;Pintar Bordes en y
-  ]
+  pintarCalles
 
-  ask patches with [pxcor = world-width - 1 and pycor = world-height - 1][
-    set pcolor white                                                     ;;Pintar Final
-  ]
-
-  create-lideres 1 [                                                   ;;Creación de Lider Estudiantil
-    set shape  "person"
+  ;;Creación de estudiantes
+  create-estudiantes num-estudiantes [
+    set shape "person"
     set color yellow
     set size 1
     set label-color blue - 2
+    set aguante true
+    ;let estudiantesPosxy (int (num-estudiantes / (6 * ancho-calzada)) + 1)
+    ;let posxy (int (who / estudiantesPosxy))
+    ;let posy (6 - int (posxy / ancho-calzada) mod 6)
+    ;setxy (posxy mod ancho-calzada) posy
     setxy (who * 1 mod ancho-calzada) (6 - int (who / ancho-calzada) mod 6)
     set heading 0
-    if (random 100 < porcentaje-pintura)[
-      set pintura true                                                 ;;Probabilidad de llevar pintura
+
+    if who = 0
+    [
+      set hidden? true
+      ;pd
     ]
-    if (random 100 < procentaje-papas)[
-      set papa true                                                    ;;Probabilidad de llevar Papas bomba
+
+    ;;Probabilidad de llevar pintura
+    ifelse (random 100 < porcentaje-pintura)[
+      set pintura? true
+    ][
+      set pintura? false
+    ]
+
+    ;;Probabilidad de llevar Papas bomba
+    ifelse (random 100 < procentaje-papas)[
+      set papa? true
+    ][
+      set papa? false
     ]
   ]
 
-  create-estudiantes (num-estudiantes - 1) [                                ;;Creación de estudiantes
-    set shape  "person"
-    set color yellow
-    set size 1
-    set label-color blue - 2
-    setxy (who * 1 mod ancho-calzada) (6 - int (who / ancho-calzada) mod 6)
-    set heading 0
-    if (random 100 < porcentaje-pintura)[
-      set pintura true                                                 ;;Probabilidad de llevar pintura
-    ]
-    if (random 100 < procentaje-papas)[
-      set papa true                                                    ;;Probabilidad de llevar Papas bomba
-    ]
-  ]
-
-  create-policias (num-esmad / 100 * num-estudiantes) [                ;;Creación de policias del esmad
+  ;;Creación de policias del esmad
+  create-policias (num-esmad / 100 * num-estudiantes) [
     set shape  "person police"
     set color green
     set size 1
     set label-color blue - 2
     setxy (who * 1 mod ancho-calzada) (20 + int (who / ancho-calzada ) mod 10)
     set heading 90
+    set alertado? false
   ]
 
   reset-ticks
 end
 
-to do
-  if (all? lideres [xcor = final-x and ycor = final-y] and all? estudiantes [xcor = final-x and ycor = final-y])
-    [ stop ]
+to pintarCalles
+  ask patches [
+    if esCalle? [ set pcolor black ]
+    if esCarrera? [ set pcolor black ]
 
-  ask lideres [
-    moverLider
-    pintar
-    explotar
+    ifelse (nivelGas >= nivelFuego)
+    [ if(nivelGas > 0.05) [ set pcolor scale-color yellow nivelGas 0.01 1 ]]
+    [ if(nivelFuego > 0.05) [ set pcolor scale-color red nivelFuego 0.01 1 ]]
+
+    if esFinal? [ set pcolor white ]
+    if esCasa? [ set pcolor gray ]
+    if esCasa? and quemado? [ set pcolor one-of [ red orange ]]
+    if pintado? [ set pcolor blue ]
   ]
+end
+
+to do
+  if (all? estudiantes [xcor >= final-x and ycor >= final-y])
+  [ stop ]
 
   ask estudiantes [
-    moverEstudiantes
-    pintar
-    explotar
+    ifelse (xcor >= final-x and ycor >= final-y) [ stop ]
+    [
+      moverEstudiante
+      pintar
+      explotar
+    ]
   ]
 
-  ask policias [
+  ask policias
+  [ moverPolicia ]
 
+  diffuse nivelGas 0.4
+  diffuse nivelFuego 0.4
+  diffuse rutaMarcha 0.1
+  ask patches
+  [
+    if (nivelFuego > 0.05) [set quemado? true ]
+    set nivelGas nivelGas * 0.8
+    set nivelFuego nivelFuego * 0.7
+    ;set rutaMarcha rutaMarcha * 0.7
   ]
 
+  pintarCalles
   tick
 end
 
-to moverLider
-  if (patch-at 0 1 != Nobody ) [
-    if ((final-y > ycor) and ([pcolor] of patch-at 0 1 = black) or ([pcolor] of patch-at 0 1 = white))[
-      set heading 0
-      fd 1
+to moverEstudiante
+  if who >= ticks [ stop ] ;; delay initial departure
+  ifelse (not aguante and who != 0) [ die ];moverHacia 0 0 ]
+  [
+    ifelse [ nivelGas ] of patch-here > 0.01
+    [ huirGas ]
+    [
+      ifelse who = 0
+      [
+        moverHacia final-x final-y
+        crearRuta
+      ]
+      [ seguirMarcha ]
     ]
   ]
+end
 
-  if (patch-at 1 0 != Nobody ) [
-    if((final-x > xcor) and ([pcolor] of patch-at 1 0 = black) or ([pcolor] of patch-at 1 0 = white))[
-      set heading 90
-      fd 1
+to moverHacia [ posx posy ]
+  facexy posx posy
+  let validacionEsquina (random 100 < 50)
+  caminarCalles heading validacionEsquina
+end
+
+to crearRuta
+  set cont (cont + 1)
+  let contador (cont)
+  ask patch-here [set rutaMarcha contador]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;   BUSCAR LA MARCHA y SEGUIRLA   ;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to seguirMarcha
+  facexy [xcor] of estudiante 0 [ycor] of estudiante 0
+  caminarCalles heading direccionMarcha
+end
+
+to-report direccionMarcha
+  report (
+    ;([esCalle?] of patch-here and [esCarrera?] of patch-here) or
+    ;(
+      (max (list (rutaMarcha-en 0 1) (rutaMarcha-en 0 -1))) >
+      (max (list (rutaMarcha-en 1 0) (rutaMarcha-en -1 0)))
+    ;)
+  )
+end
+
+to-report rutaMarcha-en [d-x d-y]
+  let p patch-at d-x d-y
+  if p = nobody [ report 0 ]
+  report [rutaMarcha] of p
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; CAMINAR EN EL SENTIDO DE LAS CALLES ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to caminarCalles [angle vertical?]
+  let orientacion int (angle / 90)
+  ifelse (esCalle? and esCarrera?) [
+    ifelse angle mod 90 = 0
+    [caminar angle]
+    [
+      ifelse vertical? [
+        ifelse(orientacion = 0 or orientacion = 4)
+        [caminar arriba]
+        [caminar abajo]
+      ][
+        ifelse(orientacion = 0 or orientacion = 1)
+        [caminar derecha]
+        [caminar izquierda]
+      ]
+    ]
+  ][
+    if esCalle? [
+      ifelse(orientacion = 0 or orientacion = 4)
+      [caminar arriba]
+      [caminar abajo]
+    ]
+    if esCarrera? [
+      ifelse(orientacion = 0 or orientacion = 1)
+      [caminar derecha]
+      [caminar izquierda]
     ]
   ]
 end
 
-to moverEstudiantes
-  if (patch-at 0 1 != Nobody ) [
-    if ((final-y > ycor) and ((([pcolor] of patch-at 0 1 = black) and (not any? estudiantes-on patch-at 0 1) and (not any? lideres-on patch-at 0 1)) or ([pcolor] of patch-at 0 1 = white)))[
-      set heading 0
-      fd 1
-    ]
-  ]
-
-  if (patch-at 1 0 != Nobody ) [
-    if ((final-x > xcor) and ((([pcolor] of patch-at 1 0 = black) and (not any? estudiantes-on patch-at 1 0) and (not any? lideres-on patch-at 1 0)) or ([pcolor] of patch-at 1 0 = white)))[
-      set heading 90
-      fd 1
-    ]
-  ]
-end
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; ACCIONES DE ESTUDIANTES Y POLICIAS ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to pintar
-  if ( pintura != 0  and random 100 > 95)[
-    if( ycor < max-pycor - 1  and [pcolor] of patch-at 0 1 = gray )[
-      ask patch-at 0 1 [set pcolor blue]
-      alertar
-      stop
+  if ( pintura? and random 100 > 95)[
+    ask patches in-radius ancho-calzada [
+      if esCasa?
+      [ set pintado? true ]
     ]
-    if( ycor > 1  and [pcolor] of patch-at 0 -1 = gray )[
-      ask patch-at 0 -1 [set pcolor blue]
-      alertar
-      stop
-    ]
-    if( xcor < max-pxcor  and [pcolor] of patch-at 1 0 = gray)[
-      ask patch-at 1 0 [set pcolor blue]
-      alertar
-      stop
-    ]
-    if( xcor > 1  and [pcolor] of patch-at -1 0 = gray)[
-      ask patch-at -1 0 [set pcolor blue]
-      alertar
-      stop
+    alertar self
+  ]
+end
+
+to moverPolicia
+  if alertado? [
+    if objetivo != nobody
+    [
+      if ( random 100 > tolerancia-esmad )
+      [
+        moverHacia ([xcor] of objetivo) ([ycor] of objetivo)
+        if distance objetivo < 5
+        [
+          disparar objetivo
+          ;ask objetivo [ set color red ]
+        ]
+
+        if any? estudiantes in-radius 5 [ disparar min-one-of estudiantes in-radius 5 [distance myself]]
+        ask patches in-radius 5 [ ask estudiantes-here [ explotar ]]
+      ]
     ]
   ]
 end
 
 to explotar
-  if ( papa != 0  and random 100 > 95)[
-      if( ycor < max-pycor - 1  and [pcolor] of patch-at 0 1 = gray )[
-        ask patch-at 0 01 [set pcolor red]
-         stop
-      ]
-      if( ycor > 1  and [pcolor] of patch-at 0 -1 = gray )[
-        ask patch-at 0 -1 [set pcolor red]
-        stop
-      ]
-      if( xcor < max-pxcor  and [pcolor] of patch-at 1 0 = gray)[
-        ask patch-at 1 0 [set pcolor red]
-        stop
-      ]
-      if( xcor > 1  and [pcolor] of patch-at -1 0 = gray)[
-        ask patch-at -1 0 [set pcolor red]
-        stop
-      ]
-    ]
+  if ( papa? and random 100 > 98)[
+    ask patch-here
+    [ set nivelFuego 60 ]
+    alertar self
+  ]
 end
 
-to alertar
+to alertar [ estObj ]
   ask policias [
-    if ( random 100 > tolerancia-esmad )[
-      disparar
+    if not alertado?
+    [
+      set alertado? true
+      set objetivo estObj
     ]
-  ]
-  ask estudiantes [
-    huir
   ]
 end
 
-to disparar
-  ask patches with [ pxcor = [xcor] of turtle 0  and pycor = [ycor] of turtle 0][ set pcolor yellow]
+to disparar [obj]
+  ask obj
+  [
+    if (
+      (xcor < (final-x - ancho-calzada) or ycor < (final-y - ancho-calzada))
+      and
+      (xcor > ancho-calzada or ycor > 6)
+    )
+    [
+      ask patch-here [ if (random 100 = 1 or nivelGas < 0.005) [ set nivelGas 60 ]]
+    ]
+  ]
+  set alertado? false
 end
 
-to huir
-  if (patch-at 0 -1 != Nobody ) [
-    if(([pcolor] of patch-at 0 -1 = black) and ([pcolor] of patch-at 0 -1 = white))[
-      set heading 0
-      bk 1
-    ]
-  ]
+to caminar [angle]
+  set heading angle
+  if puedeAvanzar? 1 [fd 1]
+end
 
-  if (patch-at 1 0 != Nobody ) [
-    if (([pcolor] of patch-at 1 0 = black) and ([pcolor] of patch-at 1 0 = white))[
-      set heading 90
-      fd 1
-    ]
-  ]
+to-report puedeAvanzar? [distancia]
+  report (can-move? distancia and
+    (
+      ([esFinal?] of patch-ahead distancia) or (
+        (not [esCasa?] of patch-ahead distancia) and (not any? estudiantes-on patch-ahead distancia)
+      )
+    )
+  )
+end
+
+to huirGas
+  if random 100 < 5
+  [set aguante false]
+
+  let gasAdelante gas-en 0
+  let gasDerecha gas-en 90
+  let gasIzquierda gas-en 270
+  let gasAtras gas-en 180
+
+  let rand (random 100 > 50 )
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasAtras)
+  [ caminarCalles heading rand ]
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasAdelante)
+  [ caminarCalles (heading + 180) rand ]
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasIzquierda)
+  [ caminarCalles (heading + 270) rand ]
+
+  if (max (list gasAdelante gasDerecha gasIzquierda gasAtras) = gasDerecha)
+  [ caminarCalles (heading + 90) rand ]
+end
+
+to-report gas-en [angle]
+  let p patch-right-and-ahead angle 1
+  if p = nobody [ report 0 ]
+  report [nivelGas] of p
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -232,8 +402,8 @@ GRAPHICS-WINDOW
 50
 0
 30
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -247,7 +417,7 @@ num-calles
 num-calles
 1
 10
-7.0
+4.0
 1
 1
 NIL
@@ -262,7 +432,7 @@ num-carreras
 num-carreras
 1
 10
-3.0
+5.0
 1
 1
 NIL
@@ -277,7 +447,7 @@ ancho-calzada
 ancho-calzada
 1
 10
-2.0
+3.0
 1
 1
 NIL
@@ -324,7 +494,7 @@ num-esmad
 num-esmad
 0
 100
-1.0
+36.0
 1
 1
 NIL
@@ -356,7 +526,7 @@ porcentaje-pintura
 porcentaje-pintura
 0
 100
-0.0
+45.0
 1
 1
 NIL
@@ -371,7 +541,7 @@ procentaje-papas
 procentaje-papas
 0
 100
-0.0
+54.0
 1
 1
 NIL
@@ -386,7 +556,7 @@ tolerancia-esmad
 tolerancia-esmad
 0
 100
-0.0
+40.0
 1
 1
 NIL
@@ -395,10 +565,10 @@ HORIZONTAL
 MONITOR
 981
 253
-1077
+1158
 298
-pintados
-pintados
+Estudiantes que huyeron
+num-estudiantes - count estudiantes
 17
 1
 11
@@ -407,8 +577,8 @@ TEXTBOX
 983
 348
 1300
-418
-Gris edificios\nAzul pintura\nRojo Papas bomba\nAmarillo Gas pimienta arrojado por los policias\n
+460
+Gris: Edificios\nAzul: Ppintura\nRojo: Fuego de Papas bomba\nAmarillo: Gas pimienta arrojado por los policias\n\n\nOrigen: Abajo Izquierda\nFinal: Arriba Derecha
 11
 0.0
 1
